@@ -928,20 +928,35 @@
                 setTimeout(autoResizeTextarea, 300);
             });
 
-            // ── Work around the iOS "installed app" safe-area bug ──
-            // On some devices, env(safe-area-inset-top) reports 0px on
-            // first paint when the site is launched as a home-screen app
-            // (even though the device has a notch/Dynamic Island), which
-            // lets the status bar overlap the topbar. Detect that case and
-            // apply a manual fallback; keep re-checking so the fallback is
-            // dropped automatically once the browser reports real values.
-            (function fixStandaloneSafeArea() {
-                function isStandalone() {
+            // ── Work around browser/webview safe-area bugs ──
+            // env(safe-area-inset-top) can report 0px even on a notch /
+            // Dynamic Island device when the page is shown with no
+            // browser chrome around it — this happens for installed
+            // home-screen apps, but ALSO for in-app browsers like
+            // Telegram's, which never identify themselves as "standalone"
+            // yet have the exact same no-chrome layout. Detect "no visible
+            // chrome" directly (visible height ≈ physical screen height)
+            // instead of relying on APIs that only some of these contexts
+            // report correctly. Re-checks continuously so the fallback is
+            // dropped automatically if/when real values become available.
+            (function fixSafeArea() {
+                function isStandaloneApp() {
                     return window.navigator.standalone === true ||
                         (window.matchMedia && (
                             window.matchMedia('(display-mode: standalone)').matches ||
                             window.matchMedia('(display-mode: fullscreen)').matches
                         ));
+                }
+
+                function hasNoBrowserChrome() {
+                    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+                    const screenH = window.screen && window.screen.height;
+                    if (!screenH) return false;
+                    // A visible address bar / toolbar (Safari, Telegram's
+                    // own header, etc.) usually eats 50px+ of height. Not
+                    // much gap left means there's essentially nothing
+                    // reserving room for the status bar but us.
+                    return (screenH - vh) < 60;
                 }
 
                 function measureInset(side) {
@@ -957,14 +972,9 @@
                 }
 
                 function apply() {
-                    if (!isStandalone()) return;
+                    if (!isStandaloneApp() && !hasNoBrowserChrome()) return;
                     const top = measureInset('top');
                     const bottom = measureInset('bottom');
-                    // Only kicks in when the browser genuinely reports 0
-                    // while running standalone; a real device without a
-                    // notch also reports 0 here and correctly gets no
-                    // extra padding in a normal (non-standalone) tab, so
-                    // this only affects the specific broken case.
                     document.documentElement.style.setProperty('--safe-top-min', top < 1 ? '47px' : '0px');
                     document.documentElement.style.setProperty('--safe-bottom-min', bottom < 1 ? '20px' : '0px');
                 }
