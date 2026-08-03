@@ -92,11 +92,19 @@
         touch-action: pan-x pan-y;
         overscroll-behavior: none;
         -webkit-touch-callout: none;
-        padding:
-            max(env(safe-area-inset-top), var(--safe-top-min))
-            max(0px, env(safe-area-inset-right))
-            max(env(safe-area-inset-bottom), var(--safe-bottom-min))
-            max(0px, env(safe-area-inset-left));
+        /* Longhand, not shorthand: the "Add to Home Screen" WebKit
+           rendering path fails to parse a single 4-value `padding`
+           shorthand built from nested max()/env()/var() expressions —
+           and per spec, one invalid value in a shorthand invalidates
+           the WHOLE declaration, silently dropping padding to 0. Plain
+           longhand declarations parse independently, so one failing
+           doesn't take the others down with it. JS below also sets
+           these as inline px values directly, which is the real
+           belt-and-suspenders fix. */
+        padding-top: max(env(safe-area-inset-top), var(--safe-top-min));
+        padding-right: max(0px, env(safe-area-inset-right));
+        padding-bottom: max(env(safe-area-inset-bottom), var(--safe-bottom-min));
+        padding-left: max(0px, env(safe-area-inset-left));
         overflow: hidden;
     }
 
@@ -972,62 +980,34 @@
                 }
 
                 function apply() {
-                    if (!isStandaloneApp() && !hasNoBrowserChrome()) return;
+                    const inChromelessContext = isStandaloneApp() || hasNoBrowserChrome();
+
                     const top = measureInset('top');
                     const bottom = measureInset('bottom');
-                    document.documentElement.style.setProperty('--safe-top-min', top < 1 ? '47px' : '0px');
-                    document.documentElement.style.setProperty('--safe-bottom-min', bottom < 1 ? '20px' : '0px');
+                    const left = measureInset('left');
+                    const right = measureInset('right');
+
+                    // env() reported real numbers (confirmed by the debug
+                    // badge), so use them directly. Only fall back to a
+                    // hardcoded guess if env() itself reports 0 in a
+                    // context we know should have a real inset.
+                    const topPx = top > 0 ? top : (inChromelessContext ? 47 : 0);
+                    const bottomPx = bottom > 0 ? bottom : (inChromelessContext ? 20 : 0);
+
+                    // Set as plain inline px values — NOT via a CSS
+                    // shorthand/var()/max() chain, since that's what was
+                    // silently failing to parse. Inline styles set from
+                    // JS as simple numbers can't hit that parser bug.
+                    document.body.style.paddingTop = topPx + 'px';
+                    document.body.style.paddingBottom = bottomPx + 'px';
+                    document.body.style.paddingLeft = left + 'px';
+                    document.body.style.paddingRight = right + 'px';
                 }
 
                 apply();
                 window.addEventListener('resize', apply);
                 window.addEventListener('orientationchange', function() { setTimeout(apply, 300); });
                 document.addEventListener('visibilitychange', apply);
-            })();
-
-            // ── TEMPORARY DIAGNOSTIC BADGE ──
-            // The safe-area fallback above is still not applying correctly
-            // on your device and I can't inspect it remotely, so this
-            // prints the real numbers your phone is reporting directly on
-            // screen. Please screenshot it (after adding to home screen
-            // and opening from the icon) and send it back — then this
-            // block gets deleted once I know what's actually happening.
-            (function debugSafeAreaBadge() {
-                const badge = document.createElement('div');
-                badge.style.cssText =
-                    'position:fixed; top:0; left:0; right:0; z-index:99999; ' +
-                    'background:rgba(200,0,0,0.92); color:#fff; ' +
-                    'font:11px/1.5 monospace; padding:6px 8px; white-space:pre-wrap;';
-                document.body.appendChild(badge);
-
-                function probe(side) {
-                    const el = document.createElement('div');
-                    el.style.cssText = 'position:fixed; width:1px; padding-' + side + ': env(safe-area-inset-' + side + ');';
-                    document.body.appendChild(el);
-                    const v = getComputedStyle(el)['padding' + side[0].toUpperCase() + side.slice(1)];
-                    el.remove();
-                    return v;
-                }
-
-                function update() {
-                    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-                    const screenH = (window.screen && window.screen.height) || 'n/a';
-                    const bodyPadTop = getComputedStyle(document.body).paddingTop;
-                    badge.textContent =
-                        'standalone=' + window.navigator.standalone +
-                        ' dm-standalone=' + (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) +
-                        ' envTop=' + probe('top') +
-                        ' envBottom=' + probe('bottom') +
-                        ' innerH=' + window.innerHeight +
-                        ' vh=' + vh +
-                        ' screenH=' + screenH +
-                        ' bodyPadTop=' + bodyPadTop;
-                }
-
-                update();
-                window.addEventListener('resize', update);
-                window.addEventListener('orientationchange', function() { setTimeout(update, 300); });
-                badge.addEventListener('click', function() { badge.remove(); });
             })();
 
             fileNameInput.addEventListener('focus', function() {
