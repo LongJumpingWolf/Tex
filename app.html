@@ -985,6 +985,51 @@
                 document.addEventListener('visibilitychange', apply);
             })();
 
+            // ── TEMPORARY DIAGNOSTIC BADGE ──
+            // The safe-area fallback above is still not applying correctly
+            // on your device and I can't inspect it remotely, so this
+            // prints the real numbers your phone is reporting directly on
+            // screen. Please screenshot it (after adding to home screen
+            // and opening from the icon) and send it back — then this
+            // block gets deleted once I know what's actually happening.
+            (function debugSafeAreaBadge() {
+                const badge = document.createElement('div');
+                badge.style.cssText =
+                    'position:fixed; top:0; left:0; right:0; z-index:99999; ' +
+                    'background:rgba(200,0,0,0.92); color:#fff; ' +
+                    'font:11px/1.5 monospace; padding:6px 8px; white-space:pre-wrap;';
+                document.body.appendChild(badge);
+
+                function probe(side) {
+                    const el = document.createElement('div');
+                    el.style.cssText = 'position:fixed; width:1px; padding-' + side + ': env(safe-area-inset-' + side + ');';
+                    document.body.appendChild(el);
+                    const v = getComputedStyle(el)['padding' + side[0].toUpperCase() + side.slice(1)];
+                    el.remove();
+                    return v;
+                }
+
+                function update() {
+                    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+                    const screenH = (window.screen && window.screen.height) || 'n/a';
+                    const bodyPadTop = getComputedStyle(document.body).paddingTop;
+                    badge.textContent =
+                        'standalone=' + window.navigator.standalone +
+                        ' dm-standalone=' + (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) +
+                        ' envTop=' + probe('top') +
+                        ' envBottom=' + probe('bottom') +
+                        ' innerH=' + window.innerHeight +
+                        ' vh=' + vh +
+                        ' screenH=' + screenH +
+                        ' bodyPadTop=' + bodyPadTop;
+                }
+
+                update();
+                window.addEventListener('resize', update);
+                window.addEventListener('orientationchange', function() { setTimeout(update, 300); });
+                badge.addEventListener('click', function() { badge.remove(); });
+            })();
+
             fileNameInput.addEventListener('focus', function() {
                 this.select();
                 this.setSelectionRange(0, this.value.length);
