@@ -43,7 +43,14 @@
            MUST always use the same font-size / line-height / top padding,
            or the numbers will drift out of alignment with the text. */
         --editor-font-size: 13px;
-        --editor-line-height: 1.58;
+        /* An exact integer pixel value, not a unitless multiplier. The
+           gutter (plain HTML) and the textarea (a native form control
+           that pixel-snaps its own text rendering) can round a fractional
+           line-height differently, and that tiny difference compounds
+           every line. A fixed whole-pixel value removes the rounding
+           entirely — both elements are told to use precisely 21px, so
+           there is nothing left for either to round differently. */
+        --editor-line-height: 21px;
         --editor-pad-top: 34px;
 
         /* Fallback for the iOS bug where env(safe-area-inset-*) reports
@@ -354,8 +361,8 @@
         color: #1f1f1f;
         font-weight: 700;
         user-select: none;
-        min-height: calc(var(--editor-line-height) * 1em);
-        height: calc(var(--editor-line-height) * 1em);
+        min-height: var(--editor-line-height);
+        height: var(--editor-line-height);
         box-sizing: border-box;
         margin-top: 0;
     }
@@ -491,6 +498,7 @@
            variables) or the line numbers drift out of sync with the text. */
         :root {
             --editor-font-size: 16px;
+            --editor-line-height: 26px;
             --editor-pad-top: 30px;
         }
         body { padding: 0; }
