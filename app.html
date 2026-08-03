@@ -45,6 +45,13 @@
         --editor-font-size: 13px;
         --editor-line-height: 1.58;
         --editor-pad-top: 34px;
+
+        /* Fallback for the iOS bug where env(safe-area-inset-*) reports
+           0px on first paint for installed home-screen apps even on
+           notch/Dynamic Island devices. JS below detects this and raises
+           these values only when actually needed. */
+        --safe-top-min: 0px;
+        --safe-bottom-min: 0px;
     }
 
     html, body { height: 100%; }
@@ -79,9 +86,9 @@
         overscroll-behavior: none;
         -webkit-touch-callout: none;
         padding:
-            max(0px, env(safe-area-inset-top))
+            max(env(safe-area-inset-top), var(--safe-top-min))
             max(0px, env(safe-area-inset-right))
-            max(0px, env(safe-area-inset-bottom))
+            max(env(safe-area-inset-bottom), var(--safe-bottom-min))
             max(0px, env(safe-area-inset-left));
         overflow: hidden;
     }
@@ -296,8 +303,8 @@
 
     .sheet {
         flex: 1;
-        display: grid;
-        grid-template-columns: 54px minmax(0, 1fr);
+        display: flex;
+        flex-direction: column;
         min-height: 0;
         background:
             linear-gradient(180deg, rgba(255,255,255,0.94), rgba(246,246,246,0.98)),
@@ -311,14 +318,27 @@
         padding: 8px;
     }
 
+    /* The ONLY vertical scroll container. Gutter and textarea are plain
+       children inside it, so they move together as one native scroll —
+       there is no separate scroll position for either to fall out of
+       sync with, which is what previously caused the drift. */
+    .sheet-scroll {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 54px minmax(0, 1fr);
+        align-items: start;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+    }
+
     .line-gutter {
         padding: var(--editor-pad-top) 0 40px;
-        overflow: hidden;
         pointer-events: none;
         border-right: 1px solid rgba(255, 255, 255, 0.6);
         background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
         z-index: 1;
-        min-height: 0;
         display: flex;
         flex-direction: column;
     }
@@ -357,7 +377,7 @@
 
     textarea#fileContent {
         width: 100%;
-        height: 100%;
+        height: auto;
         border: none;
         outline: none;
         resize: none;
@@ -370,9 +390,12 @@
         letter-spacing: -0.1px;
         box-shadow: inset 0 0 0 1px rgba(0,0,0,0.02);
         border-radius: 10px;
-        overflow: auto;
-        min-height: 0;
-        align-self: stretch;
+        /* No vertical scroll of its own — it grows to fit its content and
+           the .sheet-scroll ancestor scrolls instead (see above). Only
+           horizontal overflow (long, unwrapped lines) stays local here. */
+        overflow-y: hidden;
+        overflow-x: auto;
+        min-height: 100%;
         /* Notepad-style: never wrap. A line only breaks on Enter; long
            lines scroll the view horizontally instead. This also keeps
            one logical line == one visual row, which is what keeps the
@@ -594,14 +617,16 @@
 
         <main class="sheet-wrap">
             <div class="sheet">
-                <div class="line-gutter" id="lineGutter" aria-hidden="true"></div>
-                <textarea
-                    id="fileContent"
-                    placeholder="Start writing …"
-                    spellcheck="true"
-                    wrap="off"
-                    aria-label="File content"
-                ></textarea>
+                <div class="sheet-scroll" id="sheetScroll">
+                    <div class="line-gutter" id="lineGutter" aria-hidden="true"></div>
+                    <textarea
+                        id="fileContent"
+                        placeholder="Start writing …"
+                        spellcheck="true"
+                        wrap="off"
+                        aria-label="File content"
+                    ></textarea>
+                </div>
             </div>
         </main>
 
@@ -642,12 +667,20 @@
                 charCount.textContent = len + ' character' + (len !== 1 ? 's' : '');
             }
 
+            function autoResizeTextarea() {
+                // Grow the textarea to fit all its content — it no longer
+                // scrolls internally, so its rendered height must always
+                // match its content height exactly.
+                fileContent.style.height = 'auto';
+                fileContent.style.height = fileContent.scrollHeight + 'px';
+            }
+
             function renderLineNumbers() {
                 const lines = fileContent.value.split('\n');
                 const count = Math.max(lines.length, 1);
                 const content = Array.from({ length: count }, (_, i) => '<span class="line-num">' + (i + 1) + '</span>').join('');
                 lineGutter.innerHTML = content;
-                lineGutter.scrollTop = fileContent.scrollTop;
+                autoResizeTextarea();
             }
 
             function showToast(message, type) {
@@ -828,22 +861,6 @@
                 }
             });
 
-            fileContent.addEventListener('scroll', function() {
-                lineGutter.scrollTop = fileContent.scrollTop;
-            });
-
-            // Momentum scrolling / iOS rubber-band overscroll is driven by
-            // the compositor and can outpace the discrete 'scroll' event,
-            // making the gutter visibly lag behind the text for a few
-            // frames. A continuous rAF loop reads the true scroll position
-            // every frame instead, so the two can never drift apart.
-            (function keepGutterInSync() {
-                if (fileContent.scrollTop !== lineGutter.scrollTop) {
-                    lineGutter.scrollTop = fileContent.scrollTop;
-                }
-                requestAnimationFrame(keepGutterInSync);
-            })();
-
             pasteBtn.addEventListener('click', handlePaste);
             downloadBtn.addEventListener('click', handleDownload);
             resetBtn.addEventListener('click', handleReset);
@@ -897,6 +914,58 @@
 
             updateCharCount();
             renderLineNumbers();
+
+            window.addEventListener('resize', autoResizeTextarea);
+            window.addEventListener('orientationchange', function() {
+                setTimeout(autoResizeTextarea, 300);
+            });
+
+            // ── Work around the iOS "installed app" safe-area bug ──
+            // On some devices, env(safe-area-inset-top) reports 0px on
+            // first paint when the site is launched as a home-screen app
+            // (even though the device has a notch/Dynamic Island), which
+            // lets the status bar overlap the topbar. Detect that case and
+            // apply a manual fallback; keep re-checking so the fallback is
+            // dropped automatically once the browser reports real values.
+            (function fixStandaloneSafeArea() {
+                function isStandalone() {
+                    return window.navigator.standalone === true ||
+                        (window.matchMedia && (
+                            window.matchMedia('(display-mode: standalone)').matches ||
+                            window.matchMedia('(display-mode: fullscreen)').matches
+                        ));
+                }
+
+                function measureInset(side) {
+                    const probe = document.createElement('div');
+                    probe.style.cssText =
+                        'position:fixed; top:0; left:0; right:0; bottom:0; ' +
+                        'width:1px; visibility:hidden; pointer-events:none; ' +
+                        'padding-' + side + ': env(safe-area-inset-' + side + ');';
+                    document.body.appendChild(probe);
+                    const value = parseFloat(getComputedStyle(probe)['padding' + side[0].toUpperCase() + side.slice(1)]) || 0;
+                    probe.remove();
+                    return value;
+                }
+
+                function apply() {
+                    if (!isStandalone()) return;
+                    const top = measureInset('top');
+                    const bottom = measureInset('bottom');
+                    // Only kicks in when the browser genuinely reports 0
+                    // while running standalone; a real device without a
+                    // notch also reports 0 here and correctly gets no
+                    // extra padding in a normal (non-standalone) tab, so
+                    // this only affects the specific broken case.
+                    document.documentElement.style.setProperty('--safe-top-min', top < 1 ? '47px' : '0px');
+                    document.documentElement.style.setProperty('--safe-bottom-min', bottom < 1 ? '20px' : '0px');
+                }
+
+                apply();
+                window.addEventListener('resize', apply);
+                window.addEventListener('orientationchange', function() { setTimeout(apply, 300); });
+                document.addEventListener('visibilitychange', apply);
+            })();
 
             fileNameInput.addEventListener('focus', function() {
                 this.select();
