@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+<meta name="theme-color" content="#14151c" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Text" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Text Creator</title>
+<link rel="icon" type="image/svg+xml" href="icon.svg" />
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png" />
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+    /* ── Reset & base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+        --canvas: #05060a;
+        --canvas-alt: #101217;
+        --canvas-glow: #1b1d24;
+        --panel: rgba(14, 16, 20, 0.98);
+        --paper: #ffffff;
+        --paper-2: #f2f2f2;
+        --ink: #121212;
+        --ink-soft: rgba(33, 31, 27, 0.42);
+        --accent: #ffffff;
+        --accent-strong: #f3f3f3;
+        --violet: #a8a8a8;
+        --rose: #f1f1f1;
+        --accent-soft: rgba(255, 255, 255, 0.08);
+        --line: #2b2f38;
+        --line-soft: rgba(255, 255, 255, 0.08);
+        --muted: #a8adb6;
+        --bright: #f7f7f7;
+        --shadow: 0 28px 70px rgba(0, 0, 0, 0.72);
+
+        /* Shared editor metrics — gutter line numbers and the textarea
+           MUST always use the same font-size / line-height / top padding,
+           or the numbers will drift out of alignment with the text. */
+        --editor-font-size: 13px;
+        --editor-line-height: 1.58;
+        --editor-pad-top: 34px;
+    }
+
+    html, body { height: 100%; }
+
+    html {
+        touch-action: pan-x pan-y;
+        -ms-touch-action: pan-x pan-y;
+        -webkit-text-size-adjust: none;
+        text-size-adjust: none;
+        /* Lock the page itself so it can never be scrolled — this is what
+           stops mobile browsers from dragging the whole layout upward
+           (topbar included) to "scroll the focused textarea into view"
+           when the on-screen keyboard opens. */
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        overflow: hidden;
+    }
+
+    body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        background: #000000;
+        color: var(--muted);
+        display: flex;
+        flex-direction: column;
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        min-height: 100vh;
+        height: 100dvh;
+        touch-action: pan-x pan-y;
+        overscroll-behavior: none;
+        -webkit-touch-callout: none;
+        padding:
+            max(0px, env(safe-area-inset-top))
+            max(0px, env(safe-area-inset-right))
+            max(0px, env(safe-area-inset-bottom))
+            max(0px, env(safe-area-inset-left));
+        overflow: hidden;
+    }
+
+    input, textarea, button { touch-action: manipulation; }
+
+    /* ── Top bar ── */
+    .app-frame {
+        width: 100%;
+        height: 100dvh;
+        max-height: 100dvh;
+        margin: 0 auto;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 0;
+        overflow: hidden;
+        background: linear-gradient(180deg, #0b0d12 0%, #05060a 100%);
+        box-shadow: none;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .topbar {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 24px;
+        padding: 16px 22px;
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.05), transparent),
+            rgba(10, 11, 15, 0.96);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(16px);
+    }
+
+    .brand { display: flex; align-items: center; gap: 10px; }
+
+    .brand-glyph {
+        font-family: 'Fraunces', serif;
+        font-weight: 700;
+        font-size: 16px;
+        color: #111111;
+        background: linear-gradient(135deg, #fbf8f0 0%, #efe9d7 100%);
+        width: 38px;
+        height: 38px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        letter-spacing: -0.6px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.9),
+            0 0 0 1px rgba(255,255,255,0.12),
+            0 0 18px rgba(255,255,255,0.25),
+            0 8px 18px rgba(0,0,0,0.42);
+    }
+
+    .brand-black { color: #111111; text-shadow: 0 0 6px rgba(255,255,255,0.45); }
+    .brand-red { color: #d23030; text-shadow: 0 0 8px rgba(210, 48, 48, 0.55); }
+
+    .brand-name {
+        font-family: 'Fraunces', serif;
+        font-weight: 600;
+        font-size: 17px;
+        color: var(--bright);
+        letter-spacing: -0.2px;
+        white-space: nowrap;
+        text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+    }
+
+    .title-cluster {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        justify-self: center;
+        width: min(100%, 680px);
+        min-width: 0;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 14px;
+        padding: 4px 10px;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+
+    .doc-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    .doc-title input {
+        background: rgba(255, 255, 255, 0.02);
+        border: none;
+        border-bottom: 1.5px dashed rgba(255, 255, 255, 0.24);
+        font-family: 'Fraunces', serif;
+        font-size: 16px;
+        color: var(--bright);
+        padding: 6px 8px;
+        width: min(200px, 42vw);
+        min-width: 0;
+        transition: border-color 0.2s ease, background 0.2s ease;
+        border-radius: 6px 6px 0 0;
+        letter-spacing: 0.1px;
+        text-shadow: 0 0 10px rgba(255,255,255,0.08);
+    }
+
+    .doc-title input::placeholder { color: var(--muted); }
+
+    .doc-title input:focus {
+        outline: none;
+        border-bottom-color: #f4f4f4;
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    .stamp {
+        font-family: 'Fraunces', serif;
+        font-size: 11px;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: #ffffff;
+        background: rgba(255,255,255,0.06);
+        border: 1.5px solid rgba(255, 255, 255, 0.34);
+        padding: 4px 10px;
+        border-radius: 999px;
+        transform: rotate(-4deg);
+        user-select: none;
+        flex-shrink: 0;
+        box-shadow: 0 0 16px rgba(255,255,255,0.08);
+    }
+
+    .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        margin-left: auto;
+    }
+
+    .doc-title input, .stamp, .brand-name, .statusbar, .statusbar-hint {
+        font-family: 'Fraunces', Georgia, serif;
+    }
+
+    .icon-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 40px;
+        padding: 0 16px;
+        border-radius: 7px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+        color: var(--bright);
+        font-family: 'Fraunces', Georgia, serif;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.1px;
+        cursor: pointer;
+        transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease, transform 0.12s ease, box-shadow 0.18s ease;
+        white-space: nowrap;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(255,255,255,0.04);
+    }
+
+    .icon-btn svg {
+        width: 16px;
+        height: 16px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex-shrink: 0;
+    }
+
+    .icon-btn:hover {
+        border-color: rgba(255, 255, 255, 0.55);
+        color: #ffffff;
+        background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.05));
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.18) inset, 0 10px 24px rgba(0,0,0,0.36);
+    }
+    .icon-btn:active { transform: scale(0.96); }
+
+    .icon-btn--primary {
+        background: linear-gradient(135deg, #ffffff 0%, #dcdcdc 100%);
+        border-color: rgba(255, 255, 255, 0.65);
+        color: #0f1116;
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.35) inset, 0 14px 28px rgba(255,255,255,0.08);
+    }
+    .icon-btn--primary:hover {
+        background: linear-gradient(135deg, #ffffff 0%, #d8d8d8 100%);
+        border-color: rgba(255, 255, 255, 0.9);
+        color: #0f1116;
+    }
+
+    .icon-btn--ghost { padding: 0 12px; }
+
+    /* ── Sheet ── */
+    main.sheet-wrap {
+        flex: 1;
+        display: flex;
+        padding: 22px 20px 28px;
+        min-height: 0;
+        background: linear-gradient(180deg, rgba(12, 18, 29, 0.82), rgba(9, 13, 20, 0.96));
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        min-height: 0;
+    }
+
+    .sheet {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 54px minmax(0, 1fr);
+        min-height: 0;
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.94), rgba(246,246,246,0.98)),
+            var(--paper);
+        border-radius: 10px;
+        box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 1px rgba(255,255,255,0.1);
+        position: relative;
+        overflow: hidden;
+        animation: riseIn 0.55s ease both;
+        border: 1px solid rgba(255,255,255,0.26);
+        padding: 8px;
+    }
+
+    .line-gutter {
+        padding: var(--editor-pad-top) 0 40px;
+        overflow: hidden;
+        pointer-events: none;
+        border-right: 1px solid rgba(255, 255, 255, 0.6);
+        background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+        z-index: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .line-gutter .line-num {
+        display: block;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: var(--editor-font-size);
+        line-height: var(--editor-line-height);
+        text-align: right;
+        padding-right: 12px;
+        padding-top: 0;
+        color: #1f1f1f;
+        font-weight: 700;
+        user-select: none;
+        min-height: calc(var(--editor-line-height) * 1em);
+        height: calc(var(--editor-line-height) * 1em);
+        box-sizing: border-box;
+        margin-top: 0;
+    }
+
+    .sheet::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+            linear-gradient(135deg, rgba(123, 97, 255, 0.09), transparent 38%),
+            linear-gradient(315deg, rgba(255, 159, 67, 0.12), transparent 40%);
+        pointer-events: none;
+    }
+
+    @keyframes riseIn {
+        from { opacity: 0; transform: translateY(16px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    textarea#fileContent {
+        width: 100%;
+        height: 100%;
+        border: none;
+        outline: none;
+        resize: none;
+        background: linear-gradient(180deg, rgba(255,255,255,0.62), rgba(255,255,255,0.88));
+        padding: var(--editor-pad-top) 24px 44px 24px;
+        font-family: 'Courier New', 'Courier', monospace;
+        font-size: var(--editor-font-size);
+        line-height: var(--editor-line-height);
+        color: var(--ink);
+        letter-spacing: -0.1px;
+        box-shadow: inset 0 0 0 1px rgba(0,0,0,0.02);
+        border-radius: 10px;
+        overflow: auto;
+        min-height: 0;
+        align-self: stretch;
+        /* Notepad-style: never wrap. A line only breaks on Enter; long
+           lines scroll the view horizontally instead. This also keeps
+           one logical line == one visual row, which is what keeps the
+           gutter numbers aligned with their text. */
+        white-space: pre;
+        overflow-wrap: normal;
+        word-break: normal;
+    }
+
+    textarea#fileContent::placeholder {
+        color: var(--ink-soft);
+        font-family: 'Inter', sans-serif;
+        font-style: italic;
+        font-weight: 400;
+    }
+
+    /* ── Status bar ── */
+    .statusbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 20px;
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.03), transparent),
+            rgba(12, 18, 29, 0.95);
+        font-size: 12px;
+        color: var(--muted);
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .statusbar-hint {
+        opacity: 0.65;
+        white-space: nowrap;
+        font-size: 12px;
+    }
+
+    /* ── Toast ── */
+    .toast-container {
+        position: fixed;
+        bottom: 56px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 999;
+        width: 90%;
+        max-width: 440px;
+        pointer-events: none;
+    }
+
+    .toast {
+        background: linear-gradient(180deg, rgba(39, 47, 68, 0.96), rgba(25, 31, 46, 0.96));
+        color: var(--bright);
+        padding: 14px 20px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        font-family: 'Inter', sans-serif;
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        opacity: 0;
+        transform: translateY(14px) scale(0.97);
+        transition: opacity 0.32s ease, transform 0.32s ease;
+        pointer-events: auto;
+        border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .toast.show { opacity: 1; transform: translateY(0) scale(1); }
+
+    .toast .toast-icon { font-size: 18px; flex-shrink: 0; }
+    .toast .toast-msg { flex: 1; line-height: 1.4; }
+
+    .toast.success { background: #1d3a2c; border-color: rgba(62, 168, 131, 0.3); }
+    .toast.error   { background: #3a1f1f; border-color: rgba(224, 102, 90, 0.3); }
+    .toast.warning { background: #3a2f16; border-color: rgba(217, 164, 65, 0.3); }
+    .toast.info    { background: #1a2733; border-color: rgba(91, 143, 199, 0.3); }
+
+    /* ── Focus & motion ── */
+    *:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .sheet { animation: none; }
+        .toast { transition: none; }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 720px) {
+        /* iOS auto-zooms any input under 16px on focus, so the editor font
+           has to grow on mobile — but the gutter must grow with it (same
+           variables) or the line numbers drift out of sync with the text. */
+        :root {
+            --editor-font-size: 16px;
+            --editor-pad-top: 30px;
+        }
+        body { padding: 0; }
+        .topbar {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            grid-template-areas:
+                "brand toolbar"
+                "title title";
+            align-items: center;
+            padding: 14px;
+            gap: 10px;
+        }
+        .brand {
+            grid-area: brand;
+            width: auto;
+            justify-content: flex-start;
+        }
+        .brand-name { display: inline; }
+        .title-cluster {
+            grid-area: title;
+            width: 100%;
+            justify-self: stretch;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .doc-title {
+            width: 100%;
+            justify-self: stretch;
+            min-width: 0;
+        }
+        .doc-title input {
+            width: 100%;
+            max-width: none;
+        }
+        .toolbar {
+            grid-area: toolbar;
+            width: auto;
+            justify-self: end;
+            justify-content: flex-end;
+            margin-left: auto;
+        }
+        .icon-btn {
+            min-width: 48px;
+            justify-content: center;
+        }
+        main.sheet-wrap { padding: 12px; }
+        .sheet { border-radius: 10px; }
+        textarea#fileContent { padding: var(--editor-pad-top) 22px 40px; }
+        .line-gutter { padding-top: var(--editor-pad-top); }
+        .statusbar { padding: 8px 18px; }
+    }
+
+    @media (max-width: 560px) {
+        .brand-name { display: inline; }
+        .doc-title input { width: 100%; }
+        .toolbar {
+            width: 100%;
+            justify-content: center;
+        }
+        .icon-btn span { display: none; }
+        .icon-btn { padding: 0 11px; height: 36px; }
+        .statusbar-hint { display: none; }
+    }
+
+    .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+    <div class="app-frame">
+        <div class="topbar">
+            <div class="brand">
+                <span class="brand-glyph" aria-hidden="true"><span class="brand-black">T</span><span class="brand-red">x</span></span>
+                <span class="brand-name">Text Creator</span>
+            </div>
+
+            <div class="title-cluster">
+                <div class="doc-title">
+                    <input
+                        type="text"
+                        id="fileName"
+                        value="untitled"
+                        placeholder="Enter name"
+                        autocomplete="off"
+                        spellcheck="false"
+                        aria-label="File name without extension"
+                    />
+                    <span class="stamp" aria-hidden="true">txt</span>
+                </div>
+            </div>
+
+            <div class="toolbar" role="toolbar" aria-label="Document actions">
+                <button class="icon-btn" id="pasteBtn" type="button" title="Paste from clipboard">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="9" y="3" width="6" height="4" rx="1" />
+                        <path d="M5 7h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z" />
+                        <path d="M9 12h6" />
+                        <path d="M9 16h4" />
+                    </svg>
+                    <span>Paste</span>
+                </button>
+
+                <button class="icon-btn icon-btn--primary" id="downloadBtn" type="button" title="Download .txt file">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                        <polyline points="8 11 12 15 16 11" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    <span>Download</span>
+                </button>
+
+                <button class="icon-btn icon-btn--ghost" id="resetBtn" type="button" title="Reset name &amp; content">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M3 12a9 9 0 1 0 3-6.7" />
+                        <path d="M3 4v6h6" />
+                    </svg>
+                    <span>Reset</span>
+                </button>
+            </div>
+        </div>
+
+        <main class="sheet-wrap">
+            <div class="sheet">
+                <div class="line-gutter" id="lineGutter" aria-hidden="true"></div>
+                <textarea
+                    id="fileContent"
+                    placeholder="Start writing …"
+                    spellcheck="true"
+                    wrap="off"
+                    aria-label="File content"
+                ></textarea>
+            </div>
+        </main>
+
+        <div class="statusbar">
+            <span id="charCount">0 characters</span>
+            <span class="statusbar-hint">⌘⇧R reset · ⌘⇧P paste · ⌘⇧S download</span>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+    <script>
+        (function() {
+            'use strict';
+
+            const fileNameInput = document.getElementById('fileName');
+            const fileContent = document.getElementById('fileContent');
+            const charCount = document.getElementById('charCount');
+            const pasteBtn = document.getElementById('pasteBtn');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            const toastContainer = document.getElementById('toastContainer');
+            const lineGutter = document.getElementById('lineGutter');
+
+            let toastTimer = null;
+
+            function getFileName() {
+                const raw = fileNameInput.value.trim();
+                return raw === '' ? 'untitled' : raw;
+            }
+
+            function getContent() {
+                return fileContent.value;
+            }
+
+            function updateCharCount() {
+                const len = fileContent.value.length;
+                charCount.textContent = len + ' character' + (len !== 1 ? 's' : '');
+            }
+
+            function renderLineNumbers() {
+                const lines = fileContent.value.split('\n');
+                const count = Math.max(lines.length, 1);
+                const content = Array.from({ length: count }, (_, i) => '<span class="line-num">' + (i + 1) + '</span>').join('');
+                lineGutter.innerHTML = content;
+                lineGutter.scrollTop = fileContent.scrollTop;
+            }
+
+            function showToast(message, type) {
+                type = type || 'info';
+                const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+                const icon = icons[type] || 'ℹ️';
+
+                if (toastTimer) {
+                    clearTimeout(toastTimer);
+                    toastTimer = null;
+                }
+                toastContainer.innerHTML = '';
+
+                const el = document.createElement('div');
+                el.className = 'toast ' + type;
+                el.innerHTML = `
+              <span class="toast-icon">${icon}</span>
+              <span class="toast-msg">${message}</span>
+            `;
+                toastContainer.appendChild(el);
+
+                requestAnimationFrame(() => { el.classList.add('show'); });
+
+                toastTimer = setTimeout(() => {
+                    el.classList.remove('show');
+                    toastTimer = setTimeout(() => {
+                        if (el.parentNode) el.remove();
+                        toastTimer = null;
+                    }, 300);
+                }, 3200);
+            }
+
+            async function handlePaste() {
+                try {
+                    if (!navigator.clipboard || !navigator.clipboard.readText) {
+                        showToast('Clipboard API not available.', 'warning');
+                        return;
+                    }
+                    const text = await navigator.clipboard.readText();
+                    if (text === '') {
+                        showToast('Clipboard is empty.', 'warning');
+                        return;
+                    }
+                    fileContent.value = text;
+                    updateCharCount();
+                    renderLineNumbers();
+                    showToast('Pasted ' + text.length + ' characters!', 'success');
+                } catch (err) {
+                    if (err.name === 'NotAllowedError') {
+                        showToast('Permission denied. Please allow clipboard access.', 'error');
+                    } else {
+                        showToast('Failed to paste: ' + (err.message || 'unknown error'), 'error');
+                    }
+                }
+            }
+
+            function isMobileDevice() {
+                const ua = navigator.userAgent || navigator.vendor || window.opera || '';
+                if (/android|iphone|ipod|iemobile|blackberry|bada|windows phone/i.test(ua)) return true;
+                // iPadOS 13+ reports as "Mac" but has multi-touch support
+                if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
+                return false;
+            }
+
+            function triggerFileDownload(blob, fullName) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fullName;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 5000);
+            }
+
+            async function handleDownload() {
+                const name = getFileName();
+                const content = getContent();
+
+                if (content.trim() === '') {
+                    showToast('Write some text before downloading.', 'warning');
+                    return;
+                }
+
+                const fullName = name + '.txt';
+                const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+
+                // Desktop: always download the file directly, never open a share sheet.
+                if (!isMobileDevice()) {
+                    try {
+                        triggerFileDownload(blob, fullName);
+                        showToast('Downloaded as ' + fullName + '!', 'success');
+                    } catch (err) {
+                        showToast('Could not download: ' + (err.message || 'unknown error'), 'error');
+                    }
+                    return;
+                }
+
+                // Mobile: open the native share sheet so the file can be saved/shared anywhere.
+                let file;
+                try {
+                    file = new File([blob], fullName, { type: 'text/plain' });
+                } catch (_) {
+                    file = blob;
+                }
+
+                const canShareFiles = navigator.share && navigator.canShare && navigator.canShare({ files: [file] });
+
+                if (canShareFiles) {
+                    try {
+                        await navigator.share({
+                            files: [file],
+                            title: name,
+                        });
+                        showToast('File shared successfully!', 'success');
+                        return;
+                    } catch (err) {
+                        if (err.name === 'AbortError') return;
+                        console.warn('Share failed, falling back:', err);
+                    }
+                }
+
+                if (navigator.share) {
+                    try {
+                        await navigator.share({
+                            title: name,
+                            text: content + '\n\n—— ' + fullName + ' ——',
+                        });
+                        showToast('Shared as text (fallback).', 'info');
+                        return;
+                    } catch (err) {
+                        if (err.name === 'AbortError') return;
+                    }
+                }
+
+                try {
+                    triggerFileDownload(blob, fullName);
+                    showToast('Downloaded as ' + fullName + ' (share not available).', 'info');
+                } catch (err) {
+                    showToast('Could not share or download: ' + (err.message || 'unknown error'), 'error');
+                }
+            }
+
+            function handleReset() {
+                fileNameInput.value = 'untitled';
+                fileContent.value = '';
+                updateCharCount();
+                renderLineNumbers();
+                showToast('Reset to default.', 'info');
+                fileContent.focus();
+            }
+
+            // When the caret sits at column 0 of a line (e.g. right after
+            // pressing Enter on a long, horizontally-scrolled line), the
+            // browser only nudges scrollLeft a little to keep the caret
+            // in view rather than snapping fully back to the start. Force
+            // it back to 0 so the new line always starts fully visible.
+            function resetHorizontalScrollIfAtLineStart() {
+                const pos = fileContent.selectionStart;
+                const value = fileContent.value;
+                const lastNewline = value.lastIndexOf('\n', pos - 1);
+                const column = pos - lastNewline - 1;
+                if (column === 0) {
+                    fileContent.scrollLeft = 0;
+                }
+            }
+
+            fileContent.addEventListener('input', function() {
+                updateCharCount();
+                renderLineNumbers();
+                resetHorizontalScrollIfAtLineStart();
+            });
+
+            fileContent.addEventListener('keyup', function(e) {
+                if (e.key === 'Enter' || e.key === 'Home' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    resetHorizontalScrollIfAtLineStart();
+                }
+            });
+
+            fileContent.addEventListener('scroll', function() {
+                lineGutter.scrollTop = fileContent.scrollTop;
+            });
+
+            // Momentum scrolling / iOS rubber-band overscroll is driven by
+            // the compositor and can outpace the discrete 'scroll' event,
+            // making the gutter visibly lag behind the text for a few
+            // frames. A continuous rAF loop reads the true scroll position
+            // every frame instead, so the two can never drift apart.
+            (function keepGutterInSync() {
+                if (fileContent.scrollTop !== lineGutter.scrollTop) {
+                    lineGutter.scrollTop = fileContent.scrollTop;
+                }
+                requestAnimationFrame(keepGutterInSync);
+            })();
+
+            pasteBtn.addEventListener('click', handlePaste);
+            downloadBtn.addEventListener('click', handleDownload);
+            resetBtn.addEventListener('click', handleReset);
+
+            document.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
+                    e.preventDefault();
+                    handleReset();
+                }
+                if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+                    e.preventDefault();
+                    handlePaste();
+                }
+                if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 's' || e.key === 'S')) {
+                    e.preventDefault();
+                    handleDownload();
+                }
+            });
+
+            // ── Block zooming entirely on mobile (pinch, double-tap, and ctrl-zoom) ──
+            (function blockZoom() {
+                const preventGesture = (e) => e.preventDefault();
+
+                document.addEventListener('gesturestart', preventGesture, { passive: false });
+                document.addEventListener('gesturechange', preventGesture, { passive: false });
+                document.addEventListener('gestureend', preventGesture, { passive: false });
+
+                document.addEventListener('touchmove', (e) => {
+                    if (e.touches && e.touches.length > 1) e.preventDefault();
+                }, { passive: false });
+
+                let lastTouchEnd = 0;
+                document.addEventListener('touchend', (e) => {
+                    const now = Date.now();
+                    if (now - lastTouchEnd <= 350) e.preventDefault();
+                    lastTouchEnd = now;
+                }, { passive: false, capture: true });
+
+                document.addEventListener('dblclick', preventGesture, { passive: false });
+
+                document.addEventListener('wheel', (e) => {
+                    if (e.ctrlKey) e.preventDefault();
+                }, { passive: false });
+
+                document.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '0')) {
+                        e.preventDefault();
+                    }
+                });
+            })();
+
+            updateCharCount();
+            renderLineNumbers();
+
+            fileNameInput.addEventListener('focus', function() {
+                this.select();
+                this.setSelectionRange(0, this.value.length);
+            });
+
+            fileNameInput.addEventListener('click', function() {
+                this.select();
+                this.setSelectionRange(0, this.value.length);
+            });
+
+            fileNameInput.addEventListener('blur', function() {
+                let val = this.value.trim();
+                if (val.toLowerCase().endsWith('.txt')) val = val.slice(0, -4);
+                if (val === '') val = 'untitled';
+                this.value = val;
+            });
+
+            fileNameInput.addEventListener('input', function() {
+                let val = this.value;
+                if (val.toLowerCase().endsWith('.txt')) this.value = val.slice(0, -4);
+            });
+
+            console.log('📄 Text Creator ready');
+        })();
+    </script>
+
+</body>
+</html>

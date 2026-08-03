@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Text app icon">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#f7f3e7" />
+      <stop offset="100%" stop-color="#d8d0bf" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="#12131a" />
+  <rect x="24" y="24" width="464" height="464" rx="86" fill="url(#bg)" stroke="#2d313d" stroke-width="4" />
+  <text x="76" y="265" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="148" font-weight="700">T</text>
+  <text x="174" y="265" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="148" font-weight="700">e</text>
+  <text x="282" y="265" fill="#c83a3a" font-family="Arial, Helvetica, sans-serif" font-size="148" font-weight="700">x</text>
+  <text x="378" y="265" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="148" font-weight="700">t</text>
+</svg>
